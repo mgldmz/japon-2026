@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>🇯🇵 Japón Nov 2026 — Mapa del Itinerario</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f4f0;color:#222}
+header{background:#8B0000;color:white;padding:14px 20px;display:flex;align-items:center;gap:12px}
+header h1{font-size:19px;font-weight:600}
+header span{font-size:12px;opacity:.8}
+.toolbar{background:white;border-bottom:1px solid #e0e0e0;padding:10px 16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.city-btn{padding:5px 14px;border-radius:8px;border:1px solid #ccc;background:white;font-size:13px;cursor:pointer;font-weight:500;transition:all .15s}
+.city-btn.active{background:#8B0000;color:white;border-color:#8B0000}
+.city-btn:hover:not(.active){background:#f0f0f0}
+.toggle-btn{padding:5px 13px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:500;transition:all .15s;border:1.5px solid}
+.toggle-btn.stores{border-color:#1a1a2e;color:#1a1a2e;background:white}
+.toggle-btn.stores.active{background:#1a1a2e;color:white}
+.toggle-btn.metro{border-color:#0277BD;color:#0277BD;background:white}
+.toggle-btn.metro.active{background:#0277BD;color:white}
+.sep{width:1px;height:24px;background:#e0e0e0;flex-shrink:0}
+.day-filters{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.day-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;cursor:pointer;border:1.5px solid transparent;transition:all .15s;user-select:none;font-weight:500}
+.day-chip.off{opacity:.3}
+.toggle-all{font-size:11px;padding:3px 9px;border:1px solid #ccc;border-radius:20px;background:white;cursor:pointer;color:#555}
+.toggle-all:hover{background:#f0f0f0}
+.filter-label{font-size:12px;color:#666;white-space:nowrap}
+#map{height:calc(100vh - 160px);width:100%}
+.leaflet-tile-pane{filter:grayscale(88%) brightness(1.1) contrast(.9)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🇯🇵 Japón — Noviembre 2026</h1>
+    <span>Tokio · Kioto · Osaka · 4 personas · 2–15 Nov</span>
+  </div>
+</header>
+<div class="toolbar">
+  <button id="btn-tokyo" class="city-btn active" onclick="setCity('tokyo')">🗼 Tokio</button>
+  <button id="btn-kyoto" class="city-btn" onclick="setCity('kyoto')">⛩️ Kioto</button>
+  <button id="btn-osaka" class="city-btn" onclick="setCity('osaka')">🎡 Osaka</button>
+  <div class="sep"></div>
+  <button id="btn-stores" class="toggle-btn stores" onclick="toggleLayer('stores')">🛍️ Tiendas</button>
+  <button id="btn-metro" class="toggle-btn metro" onclick="toggleLayer('metro')">🚇 Metro</button>
+  <div class="sep"></div>
+  <span class="filter-label">Días:</span>
+  <div class="day-filters" id="day-filters"></div>
+  <button class="toggle-all" onclick="toggleAll()">Mostrar/ocultar todos</button>
+</div>
+<div id="map"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const CITIES={
+  tokyo:{center:[35.685,139.710],zoom:13},
+  kyoto:{center:[35.010,135.755],zoom:13},
+  osaka:{center:[34.667,135.500],zoom:13},
+};
+const DAYS=[
+  {id:1, label:'D1 · Lun 2/11', color:'#6C757D'},
+  {id:2, label:'D2 · Mar 3/11', color:'#1565C0'},
+  {id:3, label:'D3 · Mié 4/11', color:'#6A1B9A'},
+  {id:4, label:'D4 · Jue 5/11', color:'#C62828'},
+  {id:5, label:'D5 · Vie 6/11', color:'#2E7D32'},
+  {id:6, label:'D6 · Sáb 7/11', color:'#E65100'},
+  {id:7, label:'D7 · Dom 8/11', color:'#AD1457'},
+  {id:8, label:'D8 · Lun 9/11', color:'#4E342E'},
+  {id:9, label:'D9 · Mar 10/11',color:'#00695C'},
+  {id:10,label:'D10 · Mié 11/11',color:'#558B2F'},
+  {id:11,label:'D11 · Jue 12/11',color:'#BF360C'},
+  {id:12,label:'D12 · Vie 13/11',color:'#283593'},
+];
+
+const PLACES=[
+  {day:1,city:'tokyo',name:'Check-in Shinjuku',zone:'Shinjuku',note:'Base para toda la semana en Tokio.',lat:35.6896,lng:139.6917},
+  {day:1,city:'tokyo',name:'Kabukicho / Shinjuku Nightlife',zone:'Shinjuku',note:'Primera noche — barrio de entretenimiento más grande de Asia.',lat:35.6951,lng:139.7035},
+  {day:2,city:'tokyo',name:'Prime Drift Tokyo 🏎️',zone:'Jinnan (Shibuya)',note:'Drift school real. Reservar en prime.drift.tokyo. Cerrado sábados.',lat:35.6628,lng:139.6989},
+  {day:2,city:'tokyo',name:'Shibuya Crossing',zone:'Shibuya',note:'El cruce peatonal más famoso del mundo.',lat:35.6595,lng:139.7004},
+  {day:2,city:'tokyo',name:'Adidas Shibuya',zone:'Shibuya',note:'Exclusivos japoneses. 5 min del Crossing.',lat:35.6609,lng:139.6994},
+  {day:2,city:'tokyo',name:'Round 1 Shibuya',zone:'Shibuya',note:'Arcades, boliche, batting cages.',lat:35.6596,lng:139.6985},
+  {day:2,city:'tokyo',name:'Shibuya Sky',zone:'Shibuya',note:'Mirador azotea Scramble Square. Reservar anticipado.',lat:35.6580,lng:139.7016},
+  {day:3,city:'tokyo',name:'Shinjuku Gyoen',zone:'Shinjuku',note:'Jardín nacional. Follaje de otoño espectacular.',lat:35.6851,lng:139.7100},
+  {day:3,city:'tokyo',name:'Map Camera',zone:'Shinjuku',note:'La mejor tienda de cámaras del mundo.',lat:35.6938,lng:139.7021},
+  {day:3,city:'tokyo',name:'Momotaro Jeans',zone:'Harajuku',note:'Denim premium artesanal japonés.',lat:35.6712,lng:139.7034},
+  {day:3,city:'tokyo',name:'Junky Special',zone:'Ura-Harajuku',note:'Denim vintage/coleccionistas.',lat:35.6706,lng:139.7040},
+  {day:3,city:'tokyo',name:'Evisu (Omotesando)',zone:'Omotesando',note:'Flagship de la icónica marca japonesa.',lat:35.6650,lng:139.7124},
+  {day:3,city:'tokyo',name:'JINS — Lentes',zone:'Harajuku',note:'Examen de vista incluido. Lentes el mismo día.',lat:35.6626,lng:139.7006},
+  {day:3,city:'tokyo',name:'🕐 Tarde libre individual',zone:'Shimokitazawa',note:'Shimokitazawa (vintage/bohemio) o Nakano Broadway.',lat:35.6614,lng:139.6680},
+  {day:3,city:'tokyo',name:'Karaoke (Joysound Shinjuku)',zone:'Shinjuku',note:'Cuarto privado para 4 con bebidas ilimitadas.',lat:35.6930,lng:139.7010},
+  {day:4,city:'tokyo',name:'Senso-ji (mañana)',zone:'Asakusa',note:'Ir a las 7am. Nakamise Street para souvenirs.',lat:35.7148,lng:139.7967},
+  {day:4,city:'tokyo',name:'Asakusa Sumo Club',zone:'Asakusa',note:'Pelear con sumos reales ~2hrs. Reservar online.',lat:35.7140,lng:139.7955},
+  {day:4,city:'tokyo',name:'Senso-ji (noche)',zone:'Asakusa',note:'Iluminado, casi sin gente.',lat:35.7152,lng:139.7970},
+  {day:5,city:'tokyo',name:'Excursión a Hakone 🗻',zone:'Hakone',note:'Onsen + Monte Fuji. Viernes = menos gente.',lat:35.2330,lng:139.1060},
+  {day:6,city:'tokyo',name:'B-PUMP Akihabara 🧗',zone:'Akihabara',note:'Uno de los mejores muros de boulder de Tokio.',lat:35.6985,lng:139.7742},
+  {day:6,city:'tokyo',name:'Akihabara + Yodobashi Camera',zone:'Akihabara',note:'Electrónica, anime, cámaras, todo.',lat:35.6984,lng:139.7732},
+  {day:6,city:'tokyo',name:'Ginza — Relojes',zone:'Ginza',note:'Grand Seiko Boutique y otras marcas.',lat:35.6717,lng:139.7649},
+  {day:6,city:'tokyo',name:'🕐 Tiempo libre individual',zone:'Ueno / Odaiba / TeamLab',note:'El día con más espacio. Ueno, TeamLab o explorar Akihabara.',lat:35.7141,lng:139.7774},
+  {day:7,city:'tokyo',name:'Tokyo City Flea Market (Odaiba)',zone:'Odaiba',note:'Solo domingos en Tokyo Big Sight.',lat:35.6298,lng:139.7944},
+  {day:7,city:'tokyo',name:'Muscle Mommies Bar 🎊',zone:'Kabukicho',note:'DESPEDIDA DE SOLTERO. Reservar anticipado.',lat:35.6941,lng:139.7038},
+  {day:7,city:'tokyo',name:'Golden Gai',zone:'Shinjuku',note:'+200 bares diminutos en callejones.',lat:35.6938,lng:139.7034},
+  {day:8,city:'kyoto',name:'Fushimi Inari Taisha ⛩️',zone:'Sur Kioto',note:'Miles de torii rojos. De noche, evita multitudes.',lat:34.9676,lng:135.7792},
+  {day:9,city:'kyoto',name:'Arashiyama — Bosque de Bambú 🎋',zone:'Oeste Kioto',note:'Muy temprano (6:30am). Tenryu-ji + río Oi.',lat:35.0168,lng:135.6713},
+  {day:9,city:'kyoto',name:'Kinkakuji (Pabellón Dorado)',zone:'Norte Kioto',note:'Arces de otoño en noviembre.',lat:35.0394,lng:135.7292},
+  {day:9,city:'kyoto',name:"Philosopher's Path",zone:'Norte Kioto',note:'Sendero de arces en otoño.',lat:35.0272,lng:135.7954},
+  {day:9,city:'kyoto',name:'Gion',zone:'Centro Kioto',note:'Barrio de geishas al atardecer.',lat:35.0037,lng:135.7758},
+  {day:9,city:'kyoto',name:'Kiyomizudera',zone:'Este Kioto',note:'Templo en ladera. Vistas panorámicas.',lat:34.9948,lng:135.7850},
+  {day:10,city:'kyoto',name:'Nara Park 🦌',zone:'Nara',note:'35 min en tren. +1,000 ciervos. Todai-ji.',lat:34.6851,lng:135.8048},
+  {day:11,city:'osaka',name:'Universal Studios Japan 🎢',zone:'USJ',note:'Último día disponible y más barato. Express Pass.',lat:34.6654,lng:135.4323},
+  {day:12,city:'osaka',name:'Castillo de Osaka',zone:'Norte Osaka',note:'Icónico castillo con jardines.',lat:34.6873,lng:135.5262},
+  {day:12,city:'osaka',name:'Kuromon Market',zone:'Centro Osaka',note:'Mercado gastronómico más famoso de Japón.',lat:34.6684,lng:135.5078},
+  {day:12,city:'osaka',name:'Shinsekai',zone:'Sur Osaka',note:'Barrio retro. Kushikatsu y gyoza.',lat:34.6527,lng:135.5063},
+  {day:12,city:'osaka',name:'Dotonbori 🍜',zone:'Namba',note:'Takoyaki, ramen, karaoke, bares.',lat:34.6687,lng:135.5030},
+  {day:12,city:'osaka',name:'🕐 Mañana libre individual (D13)',zone:'Amerikamura / Den Den Town',note:'Amerikamura (streetwear) o Den Den Town (retro/anime).',lat:34.6691,lng:135.4995},
+];
+
+const STORES=[
+  {city:'tokyo',name:'Don Quijote',zone:'Shibuya · D2',note:'Varios / souvenirs. Enorme, siempre con fila.',lat:35.6590,lng:139.6988},
+  {city:'tokyo',name:'Converse Custom Studio',zone:'Harajuku · D3',note:'Diseña tus Converse desde cero.',lat:35.6694,lng:139.7060},
+  {city:'tokyo',name:'Liberty Walk Car Store',zone:'Shinjuku · D3',note:'Partes de autos y car culture japonesa.',lat:35.6910,lng:139.6998},
+  {city:'tokyo',name:'Tokyo Shinjuku Ken Box',zone:'Shinjuku · D3',note:'Autos a escala. B2 3-33-10 Shinjuku.',lat:35.6897,lng:139.7011},
+  {city:'tokyo',name:'Nakano Broadway',zone:'Nakano · D3 (desvío)',note:'Kimonos, coleccionables raros, anime de nicho.',lat:35.7082,lng:139.6651},
+  {city:'tokyo',name:'Hobby Off (Nakano)',zone:'Nakano · D3 (desvío)',note:'Relojes y coleccionables usados a buen precio.',lat:35.7079,lng:139.6648},
+  {city:'tokyo',name:'Kappodo — Cuchillos',zone:'Kappabashi · D4',note:'La mejor cuchillería de Tokio. 10 min de Senso-ji.',lat:35.7106,lng:139.7968},
+  {city:'tokyo',name:'Animate Akihabara',zone:'Akihabara · D6',note:'La tienda de anime más grande de Tokio.',lat:35.6997,lng:139.7731},
+  {city:'tokyo',name:'Tamashii Nations Tokyo',zone:'Akihabara · D6',note:'Figuras de acción oficiales Bandai. Exclusivos Japón.',lat:35.6992,lng:139.7726},
+  {city:'tokyo',name:'Hakiboro Toys (Gachapon)',zone:'Akihabara · D6',note:'Cientos de máquinas gachapon de todo tipo.',lat:35.6988,lng:139.7718},
+  {city:'tokyo',name:'Retrogame Camp',zone:'Akihabara · D6',note:'Consolas y juegos clásicos a buen precio.',lat:35.7001,lng:139.7724},
+  {city:'tokyo',name:'Beep Tokyo',zone:'Akihabara · D6',note:'Gran tienda retro, muy valorada por coleccionistas.',lat:35.7005,lng:139.7715},
+  {city:'tokyo',name:'Hamilton Tokyo — Relojes',zone:'Ginza · D6',note:'Relojes exclusivos de Tokio. Junto a Grand Seiko.',lat:35.6720,lng:139.7655},
+  {city:'tokyo',name:'APIT Autoparts (Subaru)',zone:'Akihabara · D6',note:'Piezas Subaru y cultura de autos japonesa.',lat:35.6978,lng:139.7700},
+  {city:'tokyo',name:'Gundam Base Tokyo',zone:'Odaiba · D7',note:'Tienda oficial Gundam en DiverCity Odaiba.',lat:35.6257,lng:139.7745},
+  {city:'tokyo',name:'TeamLab Borderless',zone:'Azabudai Hills · D7',note:'Arte digital interactivo. Nueva ubicación. Reservar anticipado.',lat:35.6568,lng:139.7394},
+  {city:'kyoto',name:'Ojama-kan — Retrogaming',zone:'Kawaramachi · D9',note:'Retrogaming y renta de juegos clásicos.',lat:35.0038,lng:135.7706},
+  {city:'kyoto',name:'Kyoto Watch Mall',zone:'Shijo · D9',note:'Relojes. Buenas opciones de marcas japonesas.',lat:35.0050,lng:135.7658},
+  {city:'osaka',name:'BB Garage — Relojes Premium',zone:'Osaka · D12',note:'Segunda mano de lujo. Rolex, Grand Seiko.',lat:34.6681,lng:135.5017},
+  {city:'osaka',name:'Tap Tap Chacer — Anillos',zone:'Shinsekai · D12',note:'Anillos hechos de monedas japonesas antiguas.',lat:34.6520,lng:135.5065},
+  {city:'osaka',name:'Lucua (Umeda)',zone:'Umeda · D12',note:'Centro comercial con gran sección de anime y gaming.',lat:34.7024,lng:135.4959},
+  {city:'osaka',name:'Osaka Hobby Center',zone:'Osaka · D12',note:'Modelos a escala, figuras y coleccionables.',lat:34.6650,lng:135.5070},
+  {city:'osaka',name:'Retero TV Game Revival',zone:'Osaka · D12',note:'Renta y venta de juegos retro.',lat:34.6670,lng:135.5040},
+];
+
+const METRO=[
+  // TOKIO
+  {city:'tokyo',name:'Shinjuku',lines:'JR Yamanote · Chuo · Metro Marunouchi · Toei Shinjuku',note:'Hub principal de Tokio. Acceso a Días 1, 3 y noches.',lat:35.6896,lng:139.7006},
+  {city:'tokyo',name:'Shibuya',lines:'JR Yamanote · Metro Ginza · Hanzomon · Fukutoshin',note:'Central para Día 2. Conexión a Harajuku (1 parada).',lat:35.6580,lng:139.7016},
+  {city:'tokyo',name:'Harajuku (JR)',lines:'JR Yamanote',note:'Estación más cercana a Takeshita St y tiendas de denim (D3).',lat:35.6702,lng:139.7027},
+  {city:'tokyo',name:'Omotesando (Metro)',lines:'Metro Ginza · Chiyoda · Hanzomon',note:'Para Evisu y tiendas de Omotesando (D3).',lat:35.6654,lng:139.7120},
+  {city:'tokyo',name:'Meiji-Jingumae (Metro)',lines:'Metro Chiyoda · Fukutoshin',note:'Alternativa a Harajuku para D3. Salida directa a Takeshita.',lat:35.6690,lng:139.7024},
+  {city:'tokyo',name:'Asakusa (Metro / Toei)',lines:'Metro Ginza · Toei Asakusa',note:'Parada central para Senso-ji y Sumo Club (D4).',lat:35.7116,lng:139.7966},
+  {city:'tokyo',name:'Akihabara (JR)',lines:'JR Yamanote · Sobu · Metro Hibiya',note:'Central para D6. B-PUMP, Yodobashi y tiendas de anime.',lat:35.6980,lng:139.7732},
+  {city:'tokyo',name:'Ginza (Metro)',lines:'Metro Ginza · Marunouchi · Hibiya',note:'Para relojes y tiendas premium (D6). 20 min de Akihabara.',lat:35.6717,lng:139.7649},
+  {city:'tokyo',name:'Odaiba-Kaihinkoen (Yurikamome)',lines:'Yurikamome (monorail)',note:'Parada para Tokyo Big Sight y Flea Market (D7). Tren desde Shimbashi.',lat:35.6249,lng:139.7770},
+  {city:'tokyo',name:'Tokyo Big Sight (Yurikamome)',lines:'Yurikamome',note:'Parada más cercana al Flea Market (D7). Una parada después de Odaiba-Kaihinkoen.',lat:35.6298,lng:139.7938},
+  {city:'tokyo',name:'Nakano (JR)',lines:'JR Chuo · Sobu',note:'Para Nakano Broadway. 5 min caminando desde la estación.',lat:35.7076,lng:139.6662},
+  {city:'tokyo',name:'Shimokitazawa (Odakyu / Keio)',lines:'Odakyu · Keio Inokashira',note:'Para tiempo libre D3. Barrio bohemio con vintage y cafés.',lat:35.6614,lng:139.6680},
+  {city:'tokyo',name:'Ueno (JR / Metro)',lines:'JR Yamanote · Keihin-Tohoku · Metro Ginza · Hibiya',note:'Para tiempo libre D6. Museos, parque y mercadillos.',lat:35.7141,lng:139.7774},
+  // KIOTO
+  {city:'kyoto',name:'Kyoto (JR)',lines:'JR Tokaido Shinkansen · JR Kintetsu · JR Sagano',note:'Hub principal. Llegada en Shinkansen (D8). Conexión a todo.',lat:34.9855,lng:135.7588},
+  {city:'kyoto',name:'Fushimi-Inari (JR)',lines:'JR Nara Line',note:'Parada directa para Fushimi Inari (D8). 5 min de Kyoto Station.',lat:34.9671,lng:135.7724},
+  {city:'kyoto',name:'Arashiyama (Keifuku / JR)',lines:'Keifuku Randen · JR Sagano',note:'Para el Bosque de Bambú y Tenryu-ji (D9).',lat:35.0168,lng:135.6768},
+  {city:'kyoto',name:'Gion-Shijo (Keihan)',lines:'Keihan Main Line',note:'Para Gion y zona geishas (D9). 10 min caminando a Kiyomizudera.',lat:35.0033,lng:135.7739},
+  {city:'kyoto',name:'Kitaoji (Bus) / Kinkakuji',lines:'Bus 101, 102, 204 desde Kyoto St',note:'No hay metro directo. Tomar bus desde Kyoto Station para Kinkakuji (D9).',lat:35.0394,lng:135.7260},
+  {city:'kyoto',name:'Nara (JR / Kintetsu)',lines:'JR Yamatoji · Kintetsu Nara Line',note:'Punto de llegada para excursión a Nara (D10). 35 min desde Kyoto.',lat:34.6843,lng:135.8050},
+  // OSAKA
+  {city:'osaka',name:'Universal City (JR)',lines:'JR Yumesaki Line',note:'Parada directa a USJ (D11). 5 min caminando a la entrada.',lat:34.6654,lng:135.4323},
+  {city:'osaka',name:'Osaka / Umeda (JR / Metro)',lines:'JR Osaka · Metro Midosuji · Tanimachi · Yotsubashi',note:'Hub principal de Osaka. Lucua y zona Umeda (D12).',lat:34.7024,lng:135.4966},
+  {city:'osaka',name:'Osakajo-koen (JR)',lines:'JR Osaka Loop Line',note:'Para el Castillo de Osaka (D12). 10 min caminando.',lat:34.6865,lng:135.5264},
+  {city:'osaka',name:'Namba (Metro / Kintetsu)',lines:'Metro Midosuji · Sennichimae · Yotsubashi',note:'Central para Dotonbori y nightlife (D12).',lat:34.6629,lng:135.5011},
+  {city:'osaka',name:'Shinsaibashi (Metro)',lines:'Metro Midosuji',note:'Para Amerikamura y shopping (D12/D13).',lat:34.6731,lng:135.5017},
+  {city:'osaka',name:'Dobutsuen-mae (Metro)',lines:'Metro Midosuji · Tanimachi',note:'Parada más cercana a Shinsekai (D12).',lat:34.6519,lng:135.5063},
+  {city:'osaka',name:'Kuromon-Ichiba (Metro)',lines:'Metro Sennichimae — Nihonbashi',note:'La más cercana al Kuromon Market (D12). 3 min caminando.',lat:34.6684,lng:135.5089},
+];
+
+let map, dayMarkers=[], storeMarkers=[], metroMarkers=[], activeCity='tokyo';
+let hiddenDays=new Set(), storesOn=false, metroOn=false, allOff=false;
+
+const dInfo=id=>DAYS.find(d=>d.id===id);
+
+const circleIcon=(color,hidden)=>L.divIcon({className:'',
+  html:`<div style="width:14px;height:14px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 1px 5px rgba(0,0,0,.4);opacity:${hidden?.2:1}"></div>`,
+  iconSize:[14,14],iconAnchor:[7,7]});
+
+const diamondIcon=(vis)=>L.divIcon({className:'',
+  html:`<div style="width:12px;height:12px;background:#1a1a2e;border:2px solid white;transform:rotate(45deg);box-shadow:0 1px 4px rgba(0,0,0,.5);opacity:${vis?1:0};pointer-events:${vis?'auto':'none'}"></div>`,
+  iconSize:[12,12],iconAnchor:[6,6]});
+
+const metroIcon=(vis)=>L.divIcon({className:'',
+  html:`<div style="width:22px;height:22px;border-radius:4px;background:#0277BD;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;opacity:${vis?1:0};pointer-events:${vis?'auto':'none'}">M</div>`,
+  iconSize:[22,22],iconAnchor:[11,11]});
+
+function refreshDayMarkers(){
+  dayMarkers.forEach(({marker,place})=>{
+    const h=hiddenDays.has(place.day);
+    marker.setIcon(circleIcon(dInfo(place.day).color,h));
+    if(h)marker.closePopup();
+  });
+  document.querySelectorAll('.day-chip').forEach(c=>c.classList.toggle('off',hiddenDays.has(+c.dataset.day)));
+}
+function toggleDay(id){hiddenDays.has(id)?hiddenDays.delete(id):hiddenDays.add(id);refreshDayMarkers();}
+function toggleAll(){
+  allOff=!allOff;
+  [...new Set(PLACES.filter(p=>p.city===activeCity).map(p=>p.day))].forEach(id=>allOff?hiddenDays.add(id):hiddenDays.delete(id));
+  refreshDayMarkers();
+}
+function toggleLayer(type){
+  if(type==='stores'){
+    storesOn=!storesOn;
+    document.getElementById('btn-stores').classList.toggle('active',storesOn);
+    storeMarkers.forEach(({marker})=>marker.setIcon(diamondIcon(storesOn)));
+  } else {
+    metroOn=!metroOn;
+    document.getElementById('btn-metro').classList.toggle('active',metroOn);
+    metroMarkers.forEach(({marker})=>marker.setIcon(metroIcon(metroOn)));
+  }
+}
+function buildFilters(city){
+  const ids=[...new Set(PLACES.filter(p=>p.city===city).map(p=>p.day))].sort((a,b)=>a-b);
+  document.getElementById('day-filters').innerHTML=ids.map(id=>{
+    const d=dInfo(id);
+    return `<span class="day-chip" data-day="${id}" onclick="toggleDay(${id})" style="background:${d.color}18;border-color:${d.color};color:${d.color}"><span style="width:8px;height:8px;border-radius:50%;background:${d.color};display:inline-block"></span>${d.label}</span>`;
+  }).join('');
+}
+function popup(title,sub,badge,badgeColor,extra=''){
+  return `<div style="min-width:200px;font-family:-apple-system,sans-serif">
+    <div style="font-size:13px;font-weight:600;color:#111;margin-bottom:3px">${title}</div>
+    ${sub?`<div style="font-size:11px;color:#555;margin-bottom:6px;line-height:1.5">${sub}</div>`:''}
+    <div style="display:flex;gap:5px;flex-wrap:wrap">
+      <span style="font-size:10px;background:${badgeColor};color:white;border-radius:10px;padding:2px 8px;font-weight:500">${badge}</span>
+      ${extra?`<span style="font-size:10px;background:#f0f0f0;color:#444;border-radius:10px;padding:2px 8px">${extra}</span>`:''}
+    </div></div>`;
+}
+
+function setCity(city){
+  activeCity=city; hiddenDays.clear(); allOff=false;
+  ['tokyo','kyoto','osaka'].forEach(c=>document.getElementById('btn-'+c).classList.toggle('active',c===city));
+  map.setView(CITIES[city].center,CITIES[city].zoom);
+  [...dayMarkers,...storeMarkers,...metroMarkers].forEach(({marker})=>map.removeLayer(marker));
+  dayMarkers=[]; storeMarkers=[]; metroMarkers=[];
+
+  PLACES.filter(p=>p.city===city).forEach(place=>{
+    const d=dInfo(place.day);
+    const m=L.marker([place.lat,place.lng],{icon:circleIcon(d.color,false),zIndexOffset:20})
+      .bindPopup(popup(place.name,place.note,d.label,d.color,place.zone))
+      .addTo(map);
+    dayMarkers.push({marker:m,place});
+  });
+
+  STORES.filter(s=>s.city===city).forEach(store=>{
+    const m=L.marker([store.lat,store.lng],{icon:diamondIcon(storesOn),zIndexOffset:10})
+      .bindPopup(popup('🛍️ '+store.name,store.note,store.zone,'#1a1a2e'))
+      .addTo(map);
+    storeMarkers.push({marker:m,store});
+  });
+
+  METRO.filter(s=>s.city===city).forEach(st=>{
+    const m=L.marker([st.lat,st.lng],{icon:metroIcon(metroOn),zIndexOffset:5})
+      .bindPopup(popup('🚇 '+st.name,st.note,st.lines,'#0277BD'))
+      .addTo(map);
+    metroMarkers.push({marker:m,station:st});
+  });
+
+  buildFilters(city);
+}
+
+window.addEventListener('load',()=>{
+  map=L.map('map').setView(CITIES.tokyo.center,13);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> contributors', maxZoom:19
+    }).addTo(map);
+  setCity('tokyo');
+});
+</script>
+</body>
+</html>
